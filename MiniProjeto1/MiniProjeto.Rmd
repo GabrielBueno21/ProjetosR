@@ -1,0 +1,300 @@
+---
+title: "Mini Projeto - Análise Financeira com Linguagem SQL e Regressão Linear"
+author: "Gabriel Bueno"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: cerulean
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{js, echo=FALSE}
+$('.title').css({'color':'black', 'font-style':'oblique'})
+
+```
+
+# Análise Exploratória com SQL
+
+Este é um código feito por Gabriel Bueno Guimarães como um projeto proposto ao curso 1 de R com Microsoft Azure da Formação Cientista de Dados da Data Science Academy
+
+**Problema:** Uma rede de hospitais gostaria de compreender as variáveis relacionadas aos gastos com internações hospitalares de pacientes.
+
+**Dicionário de dados:**
+
+-   *Age*: Idade do paciente;
+
+-   *Female:* Variável binária que indica se o paciente é do sexo feminino;
+
+-   *LOS*: Tempo de internação do paciente;
+
+-   *RACE*: Raça do paciente;
+
+-   *TOTCHG*: Custo de internação
+
+-   *APRDG*: Grupo de diagnóstico refinado do paciente
+
+```{r prepara diretório, include = FALSE}
+setwd('xxxx')
+```
+
+```{r Bibliotecas, include = FALSE}
+library(ggplot2)
+library(tidyverse)
+library(readr)
+library(sqldf)
+```
+
+```{r carrega dados}
+df <- read_csv('dataset.csv')
+
+# Head do dataset
+head(df)
+```
+
+Verificando como são os dados do dataset.
+
+```{r analise_exploratoria 1}
+str(df)
+```
+
+Analisando os valores ausentes no dataset, tem-se:
+
+```{r}
+
+sapply(df, function(x) sum(is.na(x))) 
+
+```
+
+Pela análise exploratória inicial, só existe um valor ausente e ele está presente na coluna RACE, portanto, vamos retirar este valor ausente do conjunto de dados.
+
+```{r retira NA}
+df <- na.omit(df)
+```
+
+## Respondendo às perguntas de negócio
+
+### **Pergunta 1:** Quantas raças estão representadas no dataset?
+
+```{r resp-pgt1}
+sqldf('SELECT RACE as Raças,
+      COUNT(RACE) as Num_Raças
+      FROM df')
+```
+
+Portanto, existem **6** diferentes raças representadas no dataset.
+
+### **Pergunta 2:** Qual a idade média dos pacientes?
+
+```{r resp-pgt2}
+sqldf('SELECT AVG(AGE) as Media_Idades FROM df')
+```
+
+A idade média dos pacientes é de **5.1**.
+
+### **Pergunta 3:** Qual a moda da idade dos pacientes?
+
+Uma vez que não existe uma função built-in em R para calcular a moda, é necessário definir uma função para calcula-la.
+
+```{r resp-pgt3}
+
+sqldf('SELECT MODE(AGE) as Moda_Idades,
+      COUNT(*) as Quantidade from df 
+      GROUP BY AGE')
+```
+
+Com isso, é possível observar que **0** é a idade mais comum dos pacientes internados, o que faz sentido uma vez que bebês tendem a ir mais frequentemente a hospitais ou até mesmo internações de nascimentos pré maturos ou outras complicações médicas.
+
+### **Pergunta 4:** Qual a variância da coluna idade?
+
+```{r resp-pgt4}
+sqldf('SELECT VARIANCE(AGE) as Variancia_Idade FROM df')
+```
+
+A variância representa uma medida de dispersão que indica a distância de cada valor de uma determinada base de dados em relação a sua média. A variância representa o quadrado do desvio padrão, sendo a variância um pouco menos interpretável ao cerébro humano que o desvio padrão.
+
+### **Pergunta 5:** Qual o gasto total de internações por idade?
+
+```{r resp-pgt5}
+sqldf('SELECT AGE, SUM(TOTCHG) as Total_Gasto_Idade from df
+      GROUP BY AGE
+      ORDER BY Total_Gasto_Idade DESC')
+```
+
+### **Pergunta 6:** Qual a idade gera o maior gasto com internações hospitalares?
+
+Do resultado obtido na pergunta 5, é possível notar que os pacientes que mais gastam são os pacientes com 0 anos de idade seguido pelos pacientes de 17 e 15 anos.
+
+### **Pergunta 7:** Qual o gasto total com internações hospitalares por genêro?
+
+```{r resp-pgt7}
+sqldf('SELECT FEMALE as Sexo_Feminino,
+      SUM(TOTCHG) as Gasto_Total  FROM df
+      GROUP BY FEMALE')
+```
+
+Com esse resultado do código acima, pode-se perceber que os homens tendem a ter gastos maiores com internação.
+
+### **Pergunta 8:** Qual a média de gasto com internações hospitalares por raça do paciente?
+
+```{r resp-pgt8}
+sqldf('SELECT RACE as Raça, AVG(TOTCHG) as Gasto_Medio
+      FROM df
+      GROUP BY RACE
+      ORDER BY Gasto_Medio DESC')
+```
+
+A saída do código acima mostra o **gasto médio** de internação por raça, onde é possível perceber que a raça 2 possui o maior gasto médio dentre todas as outras raças
+
+### **Pergunta 9:** Para pacientes acima de 10 anos, qual a média de gasto total com internações hospitalares?
+
+```{r resp-pgt9}
+sqldf('SELECT AGE as Idade,
+        AVG(TOTCHG) as Media_Gastos from df
+        WHERE AGE > 10 
+        GROUP BY AGE')
+```
+
+### **Pergunta 10:** Considerando o item anterior, qual idade tem média de gastos superior a 3000?
+
+```{r resp-pgt10}
+sqldf('SELECT AGE as Idade, 
+      AVG(TOTCHG) as Media_Gastos from df
+      WHERE AGE > 10
+      GROUP BY AGE
+      HAVING Media_Gastos > 3000
+      ORDER BY Media_Gastos DESC')
+```
+
+Com isso, é possível perceber que a maior média de gastos para pacientes hospitalizados com idade \> 10\
+anos e que possua uma média maior de gasto \> 10.000, fica com adolescentes de 17 anos.
+
+# Análise de Regressão
+
+### **Pergunta 1:** Qual a distribuição de idade dos pacientes que frequentam o hospital?
+
+```{r pgt1-reg}
+
+hist(df$AGE,
+     main = 'Distribuição de idade dos pacientes',
+     xlab = 'Idade',
+     ylab = 'Frequência',
+     col = 'lightblue'
+     )
+```
+
+Pelo histograma, é possível perceber que crianças com 0 anos de idade são os mais comuns na ala de internação daquele hospital.
+
+### **Pergunta 2:** Qual faixa etária tem o maior gasto total no hospital?
+
+Agrupando os dados associado a idade com o gasto total.
+
+```{r pgt2-reg}
+faixa_etaria <- df %>%
+  select(AGE, TOTCHG) %>%
+  group_by(AGE) %>%
+  summarise(gasto_total = sum(TOTCHG))
+faixa_etaria
+```
+
+Plotando o gráfico que mostra a faixa etária que mais gasta com internações.
+
+```{r barplot-faixaetaria}
+barplot(height = faixa_etaria$gasto_total,
+        names.arg = faixa_etaria$AGE,
+        xlab = 'Idade',
+        ylab = 'Gasto Total',
+        main = 'Gasto total por faixa etária',
+        col = 'lightgreen')
+```
+
+Pode-se dizer que a faixa etária que possui maior gasto é de [0-1) anos de idade.
+
+### **Pergunta 3:** Qual grupo baseado em diagnóstico (Aprdrg) tem o maior gasto total no hospital?
+
+Agregando os dados e organizando os resultados obtidos do maior para o menor valor de gasto total com internação.
+
+```{r pgt3-reg}
+grupo_diagnostico <- aggregate(TOTCHG ~ APRDRG ,
+                               data = df,
+                               FUN = sum) %>%
+                    arrange(desc(TOTCHG))
+grupo_diagnostico
+```
+
+Isso nos mostra que o grupo de diagnótico **640** é o grupo que mais gasta com internações.
+
+### **Pergunta 4:** A raça dos pacientes tem relação com o total gasto em internações no hospital?
+
+Usando uma regressão linear para confirmar a hipótese.
+
+H0: Não há efeito de RACE em TOTCH
+
+HA: Há efeito de RACE em TOTCH
+
+```{r pgt4-reg}
+
+modelo.v1 <- lm(TOTCHG ~ RACE, data = df)
+summary(modelo.v1)
+```
+
+Como Pr(\>\| t \| ) \> 0.05 para todos os casos, não há evidência estatística suficiente para rejeitar H0, portatanto, provavelmente não há um efeito de RACE em TOTCH.
+
+### **Pergunta 5:** A combinação de idade e genêro influencia no gasto total de internações do hospital?
+
+Realizando mais uma regressão linear.
+
+Suposições:
+
+H0: Não há efeito de AGE e FEMALE em TOTCHG
+
+HA: Há efeito de AGE e FEMALE em TOTCHG
+
+```{r pgt5-reg}
+modelo.v2 <- lm(TOTCHG ~AGE + FEMALE, data = df)
+summary(modelo.v2)
+```
+
+Portanto, como Pr(\>F) para ambos os casos das variáveis independentes é menor que 0.05, rejeita-se a hipótese nula. Portanto, é provável que há um efeito significativo de AGE e FEMALE em TOTCHG.
+
+### **Pergunta 6:** Como o tempo de permanência é o fator crucial para pacientes internados, desejamos descobrir se o tempo de permanência pode ser previsto a partir de idade, genêro e raça.
+
+Aplicando mais uma regressão linear para verificar se é possível prever o tempo de permanência.
+
+Hipóteses:
+
+-   H0: Não é possível prever o tempo de permanência com a idade, genêro e raça. (Não há uma relação linear)
+
+-   HA: É possível prever o tempo de permanência com a idade, genêro e raça.
+
+```{r pgt6-reg}
+modelo.v3 <- lm(LOS ~ AGE + FEMALE + RACE, data = df)
+summary(modelo.v3)
+
+```
+
+Como o valor de Pr(\> \| t \|) é maior que 0.05 em todos os casos, falhamos em rejeitar H0. Provavelmente, não é possível prever a internação somente com a idade, genêro e a raça, pois não há uma relação linear entre elas.
+
+### **Pergunta 7:** Qual variável tem maior impacto nos custos de internação hospitalar?
+
+Fazendo um modelo de regressão linear e depois analisando as estatísticas de cada uma das variáveis.
+
+```{r pgt7-reg}
+modelo.v4 <- lm(TOTCHG ~ . , data =df)
+summary(modelo.v4)
+```
+
+Obteve-se um **R^2^ = 0.5491**. Como o nível de significancia para as variáveis **RACE** e **FEMALE** não ajudam na previsão, remove-se ambas.
+
+```{r}
+modelo.v5 <- lm(TOTCHG ~ AGE +  LOS + APRDRG , data = df)
+summary(modelo.v5)
+```
+
+Portanto, as variáveis **AGE, LOS, APRDRG** são as variáveis que mais impactam nos valores da internação hospitalar.
